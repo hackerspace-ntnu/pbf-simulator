@@ -1,0 +1,79 @@
+cmake_minimum_required(VERSION 3.20)
+project(pbf-simulator LANGUAGES C CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+include(FetchContent)
+
+# Don't build GLFW's docs/tests/examples (faster, avoids warning spam)
+set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
+
+FetchContent_Declare(
+  glfw
+  GIT_REPOSITORY https://github.com/glfw/glfw.git
+  GIT_TAG 3.3.9
+)
+FetchContent_MakeAvailable(glfw)
+
+# glad (vendored in repo)
+if (EXISTS "${CMAKE_SOURCE_DIR}/external/glad/src/glad.c")
+  add_library(glad STATIC external/glad/src/glad.c)
+elseif (EXISTS "${CMAKE_SOURCE_DIR}/external/glad/src/gl.c")
+  add_library(glad STATIC external/glad/src/gl.c)
+else()
+  message(FATAL_ERROR "Could not find glad source file in external/glad/src (expected glad.c or gl.c)")
+endif()
+
+target_include_directories(glad PUBLIC external/glad/include)
+
+add_executable(pbf-simulator
+  src/main.cpp
+  src/gl_shader.cpp
+  src/gl_texture.cpp
+  src/pingpong.cpp
+  src/file_io.cpp
+  src/file_io.h
+)
+
+set_target_properties(pbf-simulator PROPERTIES
+    OUTPUT_NAME "pbf-simulator"
+)
+
+target_link_libraries(pbf-simulator PRIVATE glfw glad)
+
+if (WIN32)
+  target_link_libraries(pbf-simulator PRIVATE opengl32)
+elseif(APPLE)
+  target_link_libraries(pbf-simulator PRIVATE "-framework OpenGL" "-framework Cocoa" "-framework IOKit" "-framework CoreVideo")
+else()
+  target_link_libraries(pbf-simulator PRIVATE GL dl pthread)
+endif()
+
+# Link statically
+target_link_options(pbf-simulator PRIVATE -static-libgcc -static-libstdc++ -static)
+
+# Copy shaders and assets next to the binary so relative paths work
+add_custom_command(TARGET pbf-simulator POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E rm -rf $<TARGET_FILE_DIR:pbf-simulator>/shaders
+  COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:pbf-simulator>/shaders
+  COMMAND ${CMAKE_COMMAND} -E copy_directory
+          ${CMAKE_SOURCE_DIR}/shaders
+          $<TARGET_FILE_DIR:pbf-simulator>/shaders
+)
+
+# Make a custom command that generates a header when a shader changes 
+file(GLOB_RECURSE SHADER_FILES "${CMAKE_SOURCE_DIR}/shaders/*")
+
+add_custom_command(
+    OUTPUT "${CMAKE_BINARY_DIR}/shader_timestamp.h"
+    COMMAND ${CMAKE_COMMAND} -E echo "/* shader rebuild trigger */" > "${CMAKE_BINARY_DIR}/shader_timestamp.h"
+    DEPENDS ${SHADER_FILES}
+    COMMENT "Shaders changed, triggering rebuild"
+)
+
+target_sources(pbf-simulator PRIVATE "${CMAKE_BINARY_DIR}/shader_timestamp.h")
+target_include_directories(pbf-simulator PRIVATE "${CMAKE_BINARY_DIR}")
