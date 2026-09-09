@@ -1,0 +1,30 @@
+# Visual Studio
+.vs/
+*.vcxproj*
+*.sln
+
+# CMake
+CMakePresets.json
+cmake-build-debug
+out/
+build/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+
+# Ninja
+.ninja*
+compile_commands.json
+
+# Binaries
+*.exe
+*.dll
+*.lib
+*.pdb
+
+# Debug/Release folders
+Debug/
+Release/
+
+# Logs
+*.log
